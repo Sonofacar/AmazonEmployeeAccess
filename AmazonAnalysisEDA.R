@@ -25,67 +25,41 @@ recipe <- recipe(ACTION ~ ., data = data) %>%
 prepped_recipe <- prep(recipe)
 clean_data <- bake(prepped_recipe, new_data = data)
 
-# Check for relationships between predictors
-response <- tibble(Predictor = factor(),
-                   Value = character(),
-                   Relation_with = character(),
-                   Relation_value = factor(),
-                   Difference = double(),
-                   Magnitude = integer())
+# Attempt to look at correlations between some of the biggest groups
 no_resp <- clean_data[-10]
-predictors <- no_resp %>%
+preds <- no_resp %>%
   colnames()
-factors <- list()
+response <- tibble(Column = character(),
+                   Value = integer(),
+                   Count = integer(),
+                   Prop = double())
 
-# Cycle through predictors
-for (pred in predictors) {
-  print(pred)
-  factors[[pred]] <- no_resp[[pred]] %>%
+for (pred in preds) {
+  counts <- no_resp[pred] %>%
+    table() %>%
+    as.double()
+  cols <- rep(pred, times = length(counts))
+  values <- no_resp %>%
+    .[[pred]] %>%
     levels()
+  props <- c()
+
+  i <- 0
+  for (val in values) {
+    i <- i + 1
+    prop <- clean_data[clean_data[pred] == val, ] %>%
+      .[["ACTION"]] %>%
+      mean()
+    props[i] <- prop
+  }
+  tmp_df <- tibble(Column = cols,
+                   Value = values,
+                   Count = counts,
+                   Prop = props)
+  response <- rbind(response, tmp_df)
 }
 
-# Now, using this list, cycle through it all to
-# find correlations between factors of predictors
-rows <- 0
-pred <- 0
-n_pred <- length(predictors)
-
-for (f in factors) {
-  pred <- pred + 1
-  current_pred <- predictors[pred]
-
-  for (fact in f) {
-    value <- fact
-    rels <- predictors[pred != 1:n_pred]
-    n_rel <- 1
-
-    for (other in factors[-pred]) {
-      rel <- rels[n_rel]
-
-      for (rel_val in other) {
-        total <- dim(no_resp)[1]
-        sub_total <- no_resp[no_resp[current_pred] == fact, ] %>%
-          dim() %>%
-          .[1]
-        rel_total <- no_resp[no_resp[rel] == rel_val, ] %>%
-          dim() %>%
-          .[1]
-        rel_sub_total <- no_resp[(no_resp[current_pred] == fact) &
-                                   (no_resp[rel] == rel_val), ] %>%
-          dim() %>%
-          .[1]
-        diff <- (rel_total / total) - (rel_sub_total / sub_total)
-        mag <- sub_total
-        row <- list(Predictor = current_pred,
-                    Value = value,
-                    Relation_with = rel,
-                    Relation_value = rel_val,
-                    Difference = diff,
-                    Magnitude = mag)
-        rows <- rows + 1
-        response[rows, ] <- row
-      }
-    }
-  }
+to_compare <- response[response["Value"] > 150, ]
+compare <- function(column, value, comparison) {
 }
 
