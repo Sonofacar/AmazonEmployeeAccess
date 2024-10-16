@@ -2,6 +2,7 @@
 library(tidyverse)
 library(tidymodels)
 library(vroom)
+library(doParallel)
 
 # Read the data
 train_dirty <- vroom("train.csv") %>%
@@ -57,12 +58,21 @@ penalized_workflow <- workflow() %>%
   add_model(penalized_model) %>%
   add_recipe(recipe)
 
+# Set up parallelization
+num_cores <- 4
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
 # Tuning
 penalized_tuning_grid <- grid_regular(penalty(), mixture(), levels = 5)
 penalized_cv_results <- penalized_workflow %>%
   tune_grid(resamples = folds,
             grid = penalized_tuning_grid,
             metrics = metric_set(roc_auc))
+
+stopCluster(cl)
+
+# Get the best tuning parameters
 penalized_besttune <- penalized_cv_results %>%
   select_best(metric = "roc_auc")
 
