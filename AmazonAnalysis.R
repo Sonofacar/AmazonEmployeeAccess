@@ -4,6 +4,10 @@ library(tidymodels)
 library(vroom)
 library(doParallel)
 
+# Set up parallelization
+num_cores <- 4
+cl <- makePSOCKcluster(num_cores)
+
 # Read the data
 train_dirty <- vroom("train.csv") %>%
   mutate(ACTION = factor(ACTION))
@@ -59,8 +63,6 @@ penalized_workflow <- workflow() %>%
   add_recipe(recipe)
 
 # Set up parallelization
-num_cores <- 4
-cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
@@ -88,4 +90,46 @@ penalized_predictions <- predict(penalized_fit,
 penalized_output <- tibble(id = test_dirty$id,
                            Action = penalized_predictions)
 vroom_write(penalized_output, "penalized_logistic_regression.csv", delim = ",")
+
+#######################
+# K-Nearest Neighbors #
+#######################
+
+# Create a model
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
+
+# Create the workflow
+knn_workflow <- workflow() %>%
+  add_model(knn_model) %>%
+  add_recipe(recipe)
+
+# Set up parallelization
+registerDoParallel(cl)
+
+# Tuning
+knn_tuning_grid <- grid_regular(neighbors(), levels = 5)
+knn_cv_results <- knn_workflow %>%
+  tune_grid(resamples = folds,
+            grid = knn_tuning_grid,
+            metrics = metric_set(roc_auc))
+stopCluster(cl)
+
+# Get the best tuning parameters
+knn_besttune <- knn_cv_results %>%
+  select_best(metric = "roc_auc")
+
+# fit and make predictions
+knn_fit <- knn_workflow %>%
+  finalize_workflow(knn_besttune) %>%
+  fit(data = train_dirty)
+knn_predictions <- predict(knn_fit,
+                           new_data = test_dirty,
+                           type = "prob")$.pred_1
+
+# Write output
+knn_output <- tibble(id = test_dirty$id,
+                     Action = penalized_predictions)
+vroom_write(knn_output, "knn_model.csv", delim = ",")
 
