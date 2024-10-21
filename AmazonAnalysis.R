@@ -130,6 +130,47 @@ knn_predictions <- predict(knn_fit,
 
 # Write output
 knn_output <- tibble(id = test_dirty$id,
-                     Action = penalized_predictions)
+                     Action = knn_predictions)
 vroom_write(knn_output, "knn_model.csv", delim = ",")
+
+#################
+# Random Forest #
+#################
+
+# Create a model
+forest_model <- rand_forest(min_n = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("ranger")
+
+# Create the workflow
+forest_workflow() %>%
+  add_model(forest_model) %>%
+  add_recipe(recipe)
+
+# Set up parallelization
+registerDoParallel(cl)
+
+# Tuning
+forest_tuning_grid <- grid_regular(min_n(), levels = 20)
+forest_cv_results <- forest_workflow %>%
+  tune_grid(resamples = folds,
+            grid = forest_tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# Get the best tuning parameters
+forest_besttune <- forest_cv_results %>%
+  select_best(metric = "roc_auc")
+
+# Fit and make predictions
+forest_fit <- forest_workflow %>%
+  finalize_workflow(forest_besttune) %>%
+  fit(data = train_dirty)
+forest_predictions <- predict(forest_fit,
+                              new_data = test_dirty,
+                              type = "prob")$.pred_1
+
+# Write output
+forest_output <- tibble(id = test_dirty$id,
+                        Action = forest_output)
+vroom_write(forest_output, "random_forest.csv", delim = ",")
 
