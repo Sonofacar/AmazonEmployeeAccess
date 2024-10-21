@@ -143,7 +143,7 @@ forest_model <- rand_forest(min_n = tune()) %>%
   set_engine("ranger")
 
 # Create the workflow
-forest_workflow() %>%
+forest_workflow <- workflow() %>%
   add_model(forest_model) %>%
   add_recipe(recipe)
 
@@ -171,6 +171,6 @@ forest_predictions <- predict(forest_fit,
 
 # Write output
 forest_output <- tibble(id = test_dirty$id,
-                        Action = forest_output)
+                        Action = forest_predictions)
 vroom_write(forest_output, "random_forest.csv", delim = ",")
 
