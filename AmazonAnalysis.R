@@ -206,7 +206,7 @@ bayes_besttune <- bayes_cv_results %>%
   select_best(metric = "roc_auc")
 
 # Fit and make predictions
-bayes_fit <- bayes_workflow() %>%
+bayes_fit <- bayes_workflow %>%
   finalize_workflow(bayes_besttune) %>%
   fit(data = train_dirty)
 bayes_predictions <- predict(bayes_fit,
