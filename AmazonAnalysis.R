@@ -19,9 +19,10 @@ recipe <- recipe(ACTION ~ ., data = train_dirty) %>%
   step_mutate_at(all_double_predictors(), fn = factor) %>%
   step_other(all_nominal_predictors(), threshold = 0.001) %>%
   step_dummy(all_nominal_predictors()) %>%
-  step_normalize(all_numeric_predictors())
+  step_normalize(all_predictors()) %>%
+  step_pca(all_predictors(), threshold = 0.9)
 prepped_recipe <- prep(recipe)
-clean_data <- bake(prepped_recipe, new_data = train_dirty)
+#clean_data <- bake(prepped_recipe, new_data = train_dirty)
 
 # Create folds in the data
 folds <- vfold_cv(train_dirty, v = 10, repeats = 1)
@@ -64,6 +65,7 @@ penalized_workflow <- workflow() %>%
   add_recipe(recipe)
 
 # Set up parallelization
+cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
@@ -107,6 +109,7 @@ knn_workflow <- workflow() %>%
   add_recipe(recipe)
 
 # Set up parallelization
+cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
@@ -149,6 +152,7 @@ forest_workflow <- workflow() %>%
   add_recipe(recipe)
 
 # Set up parallelization
+cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
@@ -191,6 +195,7 @@ bayes_workflow <- workflow() %>%
   add_recipe(recipe)
 
 # Set up parallelization
+cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
@@ -217,4 +222,133 @@ bayes_predictions <- predict(bayes_fit,
 bayes_output <- tibble(id = test_dirty$id,
                        Action = bayes_predictions)
 vroom_write(bayes_output, "naive_bayes.csv", delim = ",")
+
+##############
+# Linear SVM #
+##############
+
+# Create a model
+linear_svm_model <- svm_linear(cost = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Create the workflow
+linear_svm_workflow <- workflow() %>%
+  add_model(linear_svm_model) %>%
+  add_recipe(recipe)
+
+# Set up parallelization
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+# Tuning
+linear_svm_tuning_grid <- grid_regular(cost(), levels = 10)
+linear_svm_cv_results <- linear_svm_workflow %>%
+  tune_grid(resamples = folds,
+            grid = linear_svm_tuning_grid,
+            metrics = metric_set(roc_auc))
+stopCluster(cl)
+
+# Get the best tuning parameters
+linear_svm_besttune <- linear_svm_cv_results %>%
+  select_best(metric = "roc_auc")
+
+# Fit and make predictions
+linear_svm_fit <- linear_svm_workflow %>%
+  finalize_workflow(linear_svm_besttune) %>%
+  fit(data = train_dirty)
+linear_svm_predictions <- predict(linear_svm_fit,
+                                  new_data = test_dirty,
+                                  type = "prob")$.pred_1
+
+# Write output
+linear_svm_output <- tibble(id = test_dirty$id,
+                            Action = linear_svm_predictions)
+vroom_write(linear_svm_output, "linear_svm.csv", delim = ",")
+
+##############
+# Radial SVM #
+##############
+
+# Create a model
+radial_svm_model <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Create the workflow
+radial_svm_workflow <- workflow() %>%
+  add_model(radial_svm_model) %>%
+  add_recipe(recipe)
+
+# Set up parallelization
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+# Tuning
+radial_svm_tuning_grid <- grid_regular(cost(), rbf_sigma(), levels = 10)
+radial_svm_cv_results <- radial_svm_workflow %>%
+  tune_grid(resamples = folds,
+            grid = radial_svm_tuning_grid,
+            metrics = metric_set(roc_auc))
+stopCluster(cl)
+
+# Get the best tuning parameters
+radial_svm_besttune <- radial_svm_cv_results %>%
+  select_best(metric = "roc_auc")
+
+# Fit and make predictions
+radial_svm_fit <- radial_svm_workflow %>%
+  finalize_workflow(radial_svm_besttune) %>%
+  fit(data = train_dirty)
+radial_svm_predictions <- predict(radial_svm_fit,
+                                  new_data = test_dirty,
+                                  type = "prob")$.pred_1
+
+# Write output
+radial_svm_output <- tibble(id = test_dirty$id,
+                            Action = radial_svm_predictions)
+vroom_write(radial_svm_output, "radial_svm.csv", delim = ",")
+
+##############
+# poly SVM #
+##############
+
+# Create a model
+poly_svm_model <- svm_poly(cost = tune(), degree = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Create the workflow
+poly_svm_workflow <- workflow() %>%
+  add_model(poly_svm_model) %>%
+  add_recipe(recipe)
+
+# Set up parallelization
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+# Tuning
+poly_svm_tuning_grid <- grid_regular(cost(), degree(), levels = 10)
+poly_svm_cv_results <- poly_svm_workflow %>%
+  tune_grid(resamples = folds,
+            grid = poly_svm_tuning_grid,
+            metrics = metric_set(roc_auc))
+stopCluster(cl)
+
+# Get the best tuning parameters
+poly_svm_besttune <- poly_svm_cv_results %>%
+  select_best(metric = "roc_auc")
+
+# Fit and make predictions
+poly_svm_fit <- poly_svm_workflow %>%
+  finalize_workflow(poly_svm_besttune) %>%
+  fit(data = train_dirty)
+poly_svm_predictions <- predict(poly_svm_fit,
+                                  new_data = test_dirty,
+                                  type = "prob")$.pred_1
+
+# Write output
+poly_svm_output <- tibble(id = test_dirty$id,
+                            Action = poly_svm_predictions)
+vroom_write(poly_svm_output, "poly_svm.csv", delim = ",")
 
