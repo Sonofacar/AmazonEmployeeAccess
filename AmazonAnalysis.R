@@ -4,6 +4,7 @@ library(tidymodels)
 library(discrim)
 library(vroom)
 library(doParallel)
+library(themis)
 
 # Set up parallelization
 num_cores <- 4
@@ -20,7 +21,8 @@ recipe <- recipe(ACTION ~ ., data = train_dirty) %>%
   step_other(all_nominal_predictors(), threshold = 0.001) %>%
   step_dummy(all_nominal_predictors()) %>%
   step_normalize(all_predictors()) %>%
-  step_pca(all_predictors(), threshold = 0.9)
+  step_pca(all_predictors(), threshold = 0.9) %>%
+  step_smote(all_outcomes(), neighbors = 10)
 prepped_recipe <- prep(recipe)
 #clean_data <- bake(prepped_recipe, new_data = train_dirty)
 
@@ -156,7 +158,7 @@ cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 # Tuning
-forest_tuning_grid <- grid_regular(min_n(), levels = 20)
+forest_tuning_grid <- grid_regular(min_n(), levels = 10)
 forest_cv_results <- forest_workflow %>%
   tune_grid(resamples = folds,
             grid = forest_tuning_grid,
